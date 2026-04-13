@@ -310,6 +310,11 @@ helm_diff = rule(
             providers = [HelmPackageInfo],
             mandatory = True,
         ),
+        "_copier": attr.label(
+            cfg = "exec",
+            executable = True,
+            default = Label("//helm/private/copier"),
+        ),
         "_runner": attr.label(
             doc = "A process wrapper to use for performing `helm diff`.",
             executable = True,
