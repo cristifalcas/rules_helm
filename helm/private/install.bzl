@@ -228,6 +228,109 @@ helm_upgrade = rule(
     ],
 )
 
+def _helm_diff_impl(ctx):
+    toolchain = ctx.toolchains[Label("//helm:toolchain_type")]
+
+    if toolchain.helm.basename.endswith(".exe"):
+        runner_wrapper = ctx.actions.declare_file(ctx.label.name + ".exe")
+    else:
+        runner_wrapper = ctx.actions.declare_file(ctx.label.name)
+
+    symlink(
+        ctx = ctx,
+        target_file = ctx.executable._runner,
+        output = runner_wrapper,
+    )
+
+    install_name = ctx.attr.install_name or ctx.label.name
+
+    pkg_info = ctx.attr.package[HelmPackageInfo]
+
+    args = ctx.actions.args()
+    args.add_all(_expand_opts(ctx, ctx.attr.helm_opts, ctx.attr.data))
+    args.add_all(["diff", "upgrade"])
+    args.add_all(_expand_opts(ctx, ctx.attr.opts, ctx.attr.data))
+    args.add(install_name)
+    args.add(rlocationpath(pkg_info.chart, ctx.workspace_name))
+
+    args_file = _stamp_args_file(
+        ctx = ctx,
+        helm_toolchain = toolchain,
+        raw_args = args,
+        output = ctx.actions.declare_file("{}.args.txt".format(ctx.label.name)),
+        chart = pkg_info.chart,
+    )
+
+    runfiles = ctx.runfiles([
+        args_file,
+        runner_wrapper,
+        ctx.executable._runner,
+        toolchain.helm,
+        toolchain.helm_plugins,
+        pkg_info.chart,
+    ] + ctx.files.data)
+
+    return [
+        DefaultInfo(
+            files = depset([runner_wrapper]),
+            runfiles = runfiles,
+            executable = runner_wrapper,
+        ),
+        RunEnvironmentInfo(
+            environment = {
+                "RULES_HELM_HELM_RUNNER_ARGS_FILE": rlocationpath(args_file, ctx.workspace_name),
+            },
+        ),
+        HelmInstallInfo(
+            args_file = args_file,
+        ),
+    ]
+
+helm_diff = rule(
+    doc = "Produce an executable for performing a `helm diff upgrade` operation. Requires the [helm-diff](https://github.com/databus23/helm-diff) plugin to be registered in the helm toolchain.",
+    implementation = _helm_diff_impl,
+    executable = True,
+    attrs = {
+        "data": attr.label_list(
+            doc = "Additional data to pass to `helm diff`.",
+            allow_files = True,
+            mandatory = False,
+        ),
+        "helm_opts": attr.string_list(
+            doc = "Additional arguments to pass to `helm` during diff.",
+        ),
+        "install_name": attr.string(
+            doc = "The name to use for the `helm diff upgrade` command. The target name will be used if unset.",
+        ),
+        "opts": attr.string_list(
+            doc = "Additional arguments to pass to `helm diff upgrade`.",
+        ),
+        "package": attr.label(
+            doc = "The helm package to diff.",
+            providers = [HelmPackageInfo],
+            mandatory = True,
+        ),
+        "_runner": attr.label(
+            doc = "A process wrapper to use for performing `helm diff`.",
+            executable = True,
+            cfg = "exec",
+            default = Label("//helm/private/runner"),
+        ),
+        "_stamp_flag": attr.label(
+            doc = "A setting used to determine whether or not the `--stamp` flag is enabled",
+            default = Label("//helm/private:stamp"),
+        ),
+        "_stamper": attr.label(
+            cfg = "exec",
+            executable = True,
+            default = Label("//helm/private/stamper"),
+        ),
+    },
+    toolchains = [
+        str(Label("//helm:toolchain_type")),
+    ],
+)
+
 def _helm_uninstall_impl(ctx):
     toolchain = ctx.toolchains[Label("//helm:toolchain_type")]
 

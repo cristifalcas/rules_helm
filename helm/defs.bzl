@@ -15,6 +15,10 @@ load(
     _helm_import_repository = "helm_import_repository",
 )
 load(
+    ":helm_diff.bzl",
+    _helm_diff = "helm_diff",
+)
+load(
     ":helm_install.bzl",
     _helm_install = "helm_install",
     _helm_uninstall = "helm_uninstall",
@@ -61,6 +65,7 @@ load(
 chart_content = _chart_content
 chart_file = _chart_file
 helm_chart = _helm_chart
+helm_diff = _helm_diff
 helm_import = _helm_import
 helm_import_repository = _helm_import_repository
 helm_install = _helm_install

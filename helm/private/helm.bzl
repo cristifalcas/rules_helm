@@ -1,6 +1,6 @@
 """Helm rules"""
 
-load(":install.bzl", "helm_install", "helm_uninstall", "helm_upgrade")
+load(":install.bzl", "helm_diff", "helm_install", "helm_uninstall", "helm_upgrade")
 load(":oci_digest.bzl", "helm_oci_digest")
 load(":package.bzl", "helm_package")
 load(":registry.bzl", "helm_push", "helm_push_images")
@@ -41,6 +41,7 @@ def helm_chart(
     | `{name}.oci_digest` | [helm_oci_digest](#helm_oci_digest) | `None` |
     | `{name}.push_registry` | [helm_push](#helm_push) (`include_images = False`) | `registry_url` is defined. |
     | `{name}.push` | [helm_push](#helm_push) (`include_images = True`) | `registry_url` is defined. |
+    | `{name}.diff` | [helm_diff](#helm_diff) | `None` |
     | `{name}.install` | [helm_install](#helm_install) | `None` |
     | `{name}.uninstall` | [helm_uninstall](#helm_uninstall) | `None` |
     | `{name}.upgrade` | [helm_upgrade](#helm_upgrade) | `None` |
@@ -153,6 +154,15 @@ def helm_chart(
 
     if not install_name:
         install_name = name.replace("_", "-")
+
+    helm_diff(
+        name = name + ".diff",
+        install_name = install_name,
+        package = name,
+        helm_opts = helm_opts,
+        data = data,
+        **kwargs
+    )
 
     helm_install(
         name = name + ".install",
