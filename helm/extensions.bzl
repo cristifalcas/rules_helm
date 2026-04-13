@@ -51,9 +51,7 @@ def _helm_impl(module_ctx):
                 platform.replace("-", "_"),
             )
 
-            url_platform = platform
-            if url_platform == "linux-i386":
-                url_platform = "linux-386"
+            url_platform = plugin_attrs.platform_map.get(platform, platform)
 
             helm_plugin_repository(
                 name = plugin_repo_name,
@@ -188,8 +186,12 @@ helm.host_tools()
 helm.plugin(
     name = "diff",
     url_templates = ["https://github.com/databus23/helm-diff/releases/download/v{version}/helm-diff-{platform}.tgz"],
-    version = "3.9.12",
+    version = "3.15.5",
     strip_prefix = "diff",
+    platform_map = {
+        "darwin-arm64": "macos-arm64",
+        "darwin-amd64": "macos-amd64",
+    },
     integrity = {
         "darwin-arm64": "sha256-...",
         "darwin-amd64": "sha256-...",
@@ -209,6 +211,10 @@ helm.plugin(
         ),
         "strip_prefix": attr.string(
             doc = "A directory prefix to strip from the extracted plugin archive.",
+        ),
+        "platform_map": attr.string_dict(
+            doc = "Optional mapping from helm platform names to plugin platform names for URL construction. E.g., `{\"darwin-arm64\": \"macos-arm64\"}` for plugins that use `macos` instead of `darwin`.",
+            default = {},
         ),
         "url_templates": attr.string_list(
             doc = "URL templates for downloading the plugin. Use `{version}` and `{platform}` placeholders.",
