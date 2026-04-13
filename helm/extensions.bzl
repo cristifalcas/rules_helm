@@ -3,6 +3,7 @@
 load(
     "//helm/private:repositories.bzl",
     "helm_host_alias_repository",
+    "helm_plugin_repository",
     "helm_toolchain_repository",
     "helm_toolchain_repository_hub",
 )
@@ -35,6 +36,48 @@ def _helm_impl(module_ctx):
     host_tools = root_mod.tags.host_tools
     if not host_tools:
         host_tools = rules_mod.tags.host_tools
+
+    # Collect plugins from the root module (or rules module if root has none).
+    plugins = root_mod.tags.plugin
+    if not plugins:
+        plugins = rules_mod.tags.plugin
+
+    # Create plugin repos and build a map of platform -> plugin labels.
+    platform_plugins = {}
+    for plugin_attrs in plugins:
+        for platform, integrity in plugin_attrs.integrity.items():
+            plugin_repo_name = "helm_plugin_{}_{}".format(
+                plugin_attrs.name,
+                platform.replace("-", "_"),
+            )
+
+            url_platform = platform
+            if url_platform == "linux-i386":
+                url_platform = "linux-386"
+
+            helm_plugin_repository(
+                name = plugin_repo_name,
+                plugin_name = plugin_attrs.name,
+                urls = [
+                    template.replace(
+                        "{version}",
+                        plugin_attrs.version,
+                    ).replace(
+                        "{platform}",
+                        url_platform,
+                    )
+                    for template in plugin_attrs.url_templates
+                ],
+                integrity = integrity,
+                strip_prefix = plugin_attrs.strip_prefix,
+                yaml = plugin_attrs.yaml,
+            )
+
+            if platform not in platform_plugins:
+                platform_plugins[platform] = []
+            platform_plugins[platform].append(
+                "@{}//:{}".format(plugin_repo_name, plugin_attrs.name),
+            )
 
     toolchain_names = []
     toolchain_labels = {}
@@ -76,6 +119,7 @@ def _helm_impl(module_ctx):
                 integrity = integrity,
                 strip_prefix = url_platform,
                 platform = platform,
+                plugins = platform_plugins.get(platform, []),
             )
 
             toolchain_names.append(toolchain_repo_name)
@@ -129,9 +173,62 @@ use_repo(helm, "helm")
     },
 )
 
+_plugin = tag_class(
+    doc = """\
+An extension tag for declaring Helm plugins to include in all toolchains.
+
+Plugins are downloaded per-platform and wired into each generated helm_toolchain.
+Only platforms with an entry in the `integrity` dict will receive the plugin.
+
+An example of declaring the helm-diff plugin:
+
+```python
+helm = use_extension("@rules_helm//helm:extensions.bzl", "helm")
+helm.host_tools()
+helm.plugin(
+    name = "diff",
+    url_templates = ["https://github.com/databus23/helm-diff/releases/download/v{version}/helm-diff-{platform}.tgz"],
+    version = "3.9.12",
+    strip_prefix = "diff",
+    integrity = {
+        "darwin-arm64": "sha256-...",
+        "darwin-amd64": "sha256-...",
+        "linux-amd64": "sha256-...",
+    },
+)
+```
+""",
+    attrs = {
+        "integrity": attr.string_dict(
+            doc = "A mapping of platform to integrity hash. Only platforms listed here will receive the plugin.",
+            mandatory = True,
+        ),
+        "name": attr.string(
+            doc = "The name of the plugin.",
+            mandatory = True,
+        ),
+        "strip_prefix": attr.string(
+            doc = "A directory prefix to strip from the extracted plugin archive.",
+        ),
+        "url_templates": attr.string_list(
+            doc = "URL templates for downloading the plugin. Use `{version}` and `{platform}` placeholders.",
+            mandatory = True,
+        ),
+        "version": attr.string(
+            doc = "The version of the plugin to download.",
+            mandatory = True,
+        ),
+        "yaml": attr.string(
+            doc = "Relative path to plugin.yaml within the extracted archive (after strip_prefix).",
+            default = "plugin.yaml",
+        ),
+    },
+)
+
 helm = module_extension(
     implementation = _helm_impl,
     tag_classes = {
         "host_tools": _host_tools,
+        "plugin": _plugin,
     },
 )
